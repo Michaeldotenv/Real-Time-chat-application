@@ -5,19 +5,34 @@ import express from "express";
 const app = express();
 const server = http.createServer(app);
 
+// Production-ready Socket.IO configuration
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173"],
-    methods: ["GET", "POST"],
+    origin: process.env.NODE_ENV === "production"
+      ? [
+          process.env.FRONTEND_URL,
+          "https://your-frontend-app.onrender.com",
+          "http://your-frontend-app.onrender.com"
+        ]
+      : "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   },
+  path: "/socket.io", // Explicit path for Render proxy
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes recovery window
+    skipMiddlewares: true
+  },
+  transports: ["websocket", "polling"] // Enable both for reliability
 });
 
+// Connection state tracking
 io.onlineUsers = new Map();
 io.typingUsers = new Map();
 
+// Cleanup stale typing indicators
 const cleanupTypingStatus = () => {
   const now = Date.now();
   for (const [chatId, typingInfo] of io.typingUsers.entries()) {
@@ -36,13 +51,20 @@ const cleanupTypingStatus = () => {
   }
 };
 
+// Enhanced connection handling
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
+  console.log(`New connection: ${socket.id} (${process.env.NODE_ENV || 'development'})`);
+
+  // Debugging events
+  socket.onAny((event, ...args) => {
+    console.log(`Socket event: ${event}`, args);
+  });
 
   socket.on("register-user", (userId) => {
-    io.onlineUsers.set(userId.toString(), socket.id);
-    io.emit("user-online", userId.toString());
-    console.log(`User ${userId} is now online`);
+    const userIdStr = userId.toString();
+    io.onlineUsers.set(userIdStr, socket.id);
+    io.emit("user-online", userIdStr);
+    console.log(`User ${userIdStr} online (${io.onlineUsers.size} total)`);
   });
 
   socket.on("typing-started", ({ senderId, receiverId }) => {
@@ -94,7 +116,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
+    console.log(`Disconnected: ${socket.id}`);
     
     let disconnectedUserId = null;
     for (const [userId, socketId] of io.onlineUsers.entries()) {
@@ -102,11 +124,12 @@ io.on("connection", (socket) => {
         disconnectedUserId = userId;
         io.onlineUsers.delete(userId);
         io.emit("user-offline", userId);
-        console.log(`User ${userId} went offline`);
+        console.log(`User ${userId} offline (${io.onlineUsers.size} remaining)`);
         break;
       }
     }
 
+    // Cleanup typing indicators for disconnected user
     if (disconnectedUserId) {
       for (const [chatId, typingInfo] of io.typingUsers.entries()) {
         if (typingInfo.userId === disconnectedUserId) {
@@ -126,6 +149,16 @@ io.on("connection", (socket) => {
   });
 });
 
+// Error handling
+io.engine.on("connection_error", (err) => {
+  console.error("Socket.IO connection error:", {
+    code: err.code,
+    message: err.message,
+    context: err.context
+  });
+});
+
+// Regular cleanup
 setInterval(cleanupTypingStatus, 5000);
 
 export { io, app, server };

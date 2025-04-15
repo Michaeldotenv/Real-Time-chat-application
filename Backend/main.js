@@ -1,30 +1,49 @@
 import dotenv from "dotenv";
 dotenv.config();
-import express from "express"
-import { server, app } from './src/lib/socket.js'; // Import both `server` and `app`
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRoutes from "./src/routes/authRoutes.js";
-import msgRoutes from "./src/routes/msgRoutes.js";
+import { app, server } from "./src/lib/socket.js";
+import authRoutes from "./src/routes/authRoutes.js"; // Matches your file structure
+import msgRoutes from "./src/routes/msgRoutes.js";   // Matches your file structure
 import { connectDB } from "./src/lib/db.js";
 
-const PORT = process.env.PORT || 5001;
+const PORT = 5000;
+// Add this to your server code before the other routes
+app.get("/", (req, res) => {
+  res.send("Real-time Chat Application Server is running");
 
-// Apply middleware to the actual `app` (not server)
+})
+// ========== MIDDLEWARE ==========
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: "https://chatxspace.onrender.com" ||
+    "http://localhost:5173",
+    credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
-// Set up routes
-app.use('/api/auth', authRoutes);
-app.use('/api/messages', msgRoutes);
+// ========== ROUTES ==========
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", msgRoutes);
 
-// Start the HTTP + WebSocket server
+// ========== HEALTH CHECK ==========
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK" });
+});
+
+// ========== ERROR HANDLER ==========
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Server Error" });
+});
+
+// ========== START SERVER ==========
 server.listen(PORT, () => {
-  console.log(`✅ Socket + Express server running on http://localhost:${PORT}`);
-  connectDB();
+  console.log(`✅ Server running on port ${PORT}`);
+  connectDB().catch(err => {
+    console.error("Database connection failed:", err);
+    process.exit(1);
+  });
 });

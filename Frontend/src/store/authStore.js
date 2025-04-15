@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL =  import.meta.env.MODE=== "development" ? "http://localhost:5001": "/" ;
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -14,7 +14,8 @@ export const useAuthStore = create((set, get) => ({
   isCheckingAuth: true,
   socket: null,
   onlineUsers: new Set(),
-  
+
+  // Auth Methods
   checkAuth: async () => {
     try {
       const response = await AxiosInstance.get("/auth/check-auth");
@@ -72,6 +73,7 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Socket Methods
   connectSocket: (userId) => {
     const { socket } = get();
     if (socket?.connected) return;
@@ -85,79 +87,91 @@ export const useAuthStore = create((set, get) => ({
       timeout: 10000
     });
 
-    newSocket.on("connect", () => {
-      console.log("Socket connected");
-      newSocket.emit("register-user", userId);
-    });
-
-    newSocket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err);
-      toast.error("Connection error. Trying to reconnect...");
-    });
-
-    newSocket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
-      if (reason === "io server disconnect") {
-        newSocket.connect();
-      }
-    });
-
-    newSocket.on("user-online", (userId) => {
-      set(state => ({
-        onlineUsers: new Set([...state.onlineUsers, userId])
-      }));
-      useChatStore.getState().setUserOnline(userId);
-    });
-
-    newSocket.on("user-offline", (userId) => {
-      set(state => {
-        const newOnlineUsers = new Set(state.onlineUsers);
-        newOnlineUsers.delete(userId);
-        return { onlineUsers: newOnlineUsers };
+    const setupSocketListeners = () => {
+      // Connection Events
+      newSocket.on("connect", () => {
+        console.log("Socket connected");
+        newSocket.emit("register-user", userId);
       });
-      useChatStore.getState().setUserOffline(userId);
-    });
 
-    newSocket.on("user-typing", ({ userId, isTyping }) => {
-      useChatStore.getState().setUserTyping(userId, isTyping);
-    });
-
-    newSocket.on("message-read-receipt", ({ messageId, readerId }) => {
-      useChatStore.getState().updateMessageReadStatus(messageId, readerId);
-    });
-
-    newSocket.on("message-delivered-receipt", ({ messageId }) => {
-      useChatStore.getState().updateMessageDeliveryStatus(messageId);
-    });
-
-    newSocket.on("receive-message", (message) => {
-      const chatStore = useChatStore.getState();
-      const { selectedUser, authUser } = get();
-      
-      // Auto-send delivery confirmation
-      newSocket.emit("message-delivered", {
-        messageId: message._id,
-        senderId: message.senderId
+      newSocket.on("connect_error", (err) => {
+        console.error("Socket connection error:", err);
+        toast.error("Connection error. Trying to reconnect...");
       });
-      
-      if (selectedUser && message.senderId === selectedUser._id) {
-        newSocket.emit("message-read", {
+
+      newSocket.on("disconnect", (reason) => {
+        console.log("Socket disconnected:", reason);
+        if (reason === "io server disconnect") {
+          newSocket.connect();
+        }
+      });
+
+      // User Status Events
+      newSocket.on("user-online", (userId) => {
+        set(state => ({
+          onlineUsers: new Set([...state.onlineUsers, userId])
+        }));
+        useChatStore.getState().setUserOnline(userId);
+      });
+
+      newSocket.on("user-offline", (userId) => {
+        set(state => {
+          const newOnlineUsers = new Set(state.onlineUsers);
+          newOnlineUsers.delete(userId);
+          return { onlineUsers: newOnlineUsers };
+        });
+        useChatStore.getState().setUserOffline(userId);
+      });
+
+      // Typing Events
+      newSocket.on("user-typing", ({ userId, isTyping }) => {
+        useChatStore.getState().setUserTyping(userId, isTyping);
+      });
+
+      // Message Events
+      newSocket.on("message-read-receipt", ({ messageId, readerId }) => {
+        useChatStore.getState().updateMessageReadStatus(messageId, readerId);
+      });
+
+      newSocket.on("message-delivered-receipt", ({ messageId }) => {
+        useChatStore.getState().updateMessageDeliveryStatus(messageId);
+      });
+
+      newSocket.on("receive-message", (message) => {
+        const chatStore = useChatStore.getState();
+        const { selectedUser, authUser } = get();
+
+        // Send delivery receipt
+        newSocket.emit("message-delivered", {
           messageId: message._id,
-          readerId: authUser._id,
           senderId: message.senderId
         });
-        
-        chatStore.addReceivedMessage({
-          ...message,
-          read: true
-        });
-      } else {
-        chatStore.addReceivedMessage(message);
-        chatStore.addUnreadMessage(message.senderId);
-      }
-    });
 
+        if (selectedUser && message.senderId === selectedUser._id) {
+          // Send read receipt if viewing chat
+          newSocket.emit("message-read", {
+            messageId: message._id,
+            readerId: authUser._id,
+            senderId: message.senderId
+          });
+
+          chatStore.addReceivedMessage({
+            ...message,
+            read: true
+          });
+        } else {
+          chatStore.addReceivedMessage(message);
+          chatStore.addUnreadMessage(message.senderId);
+        }
+      });
+    };
+
+    setupSocketListeners();
     set({ socket: newSocket });
+
+    return () => {
+      newSocket.off();
+    };
   },
 
   disconnectSocket: () => {
@@ -165,24 +179,18 @@ export const useAuthStore = create((set, get) => ({
     if (socket) {
       socket.off();
       socket.disconnect();
-      set({ socket: null });
+      set({ socket: null, onlineUsers: new Set() });
     }
   },
-  
+
   sendTypingStatus: (receiverId, isTyping) => {
     const { socket, authUser } = get();
     if (!socket || !authUser) return;
-    
-    if (isTyping) {
-      socket.emit("typing-started", {
-        senderId: authUser._id,
-        receiverId
-      });
-    } else {
-      socket.emit("typing-stopped", {
-        senderId: authUser._id,
-        receiverId
-      });
-    }
+
+    const event = isTyping ? "typing-started" : "typing-stopped";
+    socket.emit(event, {
+      senderId: authUser._id,
+      receiverId
+    });
   }
 }));
