@@ -4,14 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 const ProtectedRoute = ({ children }) => {
-  const { authUser, isCheckingAuth } = useAuthStore();
+  const { authUser, isCheckingAuth, error } = useAuthStore();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isCheckingAuth && !authUser) {
-      navigate('/signin');
+    // Only redirect if auth check is complete and no user
+    if (!isCheckingAuth && !authUser && !error) {
+      navigate('/signin', { replace: true });
     }
-  }, [authUser, isCheckingAuth, navigate]);
+  }, [authUser, isCheckingAuth, error, navigate]);
 
   if (isCheckingAuth) {
     return (

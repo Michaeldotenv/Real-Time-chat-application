@@ -1,28 +1,50 @@
-import { useEffect } from 'react';
-import { useAuthStore } from '../store/authStore.js';
-import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 
-const ProtectedRoute = ({ children }) => {
-  const { authUser, isCheckingAuth, error } = useAuthStore();
-  const navigate = useNavigate();
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
-  useEffect(() => {
-    // Only redirect if auth check is complete and no user
-    if (!isCheckingAuth && !authUser && !error) {
-      navigate('/signin', { replace: true });
+const protectUpdateRoute = async (req, res, next) => {
+  try {
+    // 1. Get token from header
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, no token'
+      });
     }
-  }, [authUser, isCheckingAuth, error, navigate]);
 
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-      </div>
-    );
+    // 2. Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // 3. Get user from database
+    const user = await User.findById(decoded.userId).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // 4. Check if user is updating their own profile
+    if (req.params.id !== user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this profile'
+      });
+    }
+
+    // 5. Attach user to request
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Protect update route error:', error);
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized, token failed'
+    });
   }
-
-  return authUser ? children : null;
 };
 
-export default ProtectedRoute;
+export default protectUpdateRoute;
