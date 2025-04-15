@@ -48,27 +48,34 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  signin: async (credentials) => {
-    try {
-      set({ isLoggingIn: true });
-      const response = await AxiosInstance.post("/auth/signin", credentials, {
-        withCredentials: true
-      });
+// In authStore.js - update the signin method
+signin: async (credentials) => {
+  try {
+    set({ isLoggingIn: true });
+    const response = await AxiosInstance.post("auth/signin", credentials, {
+      withCredentials: true
+    });
+    
+    // Ensure we're getting the expected response structure
+    if (response.data && response.data.user) {
       set({ authUser: response.data.user });
       get().connectSocket(response.data.user._id);
       toast.success("Login successful!");
       return true;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed");
-      return false;
-    } finally {
-      set({ isLoggingIn: false });
+    } else {
+      throw new Error("Invalid response structure");
     }
-  },
-
+  } catch (error) {
+    console.error("Login error:", error);
+    toast.error(error.response?.data?.message || "Login failed");
+    return false;
+  } finally {
+    set({ isLoggingIn: false, isCheckingAuth: false }); // Ensure checking state is reset
+  }
+},
   signout: async () => {
     try {
-      await AxiosInstance.post("/api/auth/signout", {}, {
+      await AxiosInstance.post("auth/signout", {}, {
         withCredentials: true
       });
       get().disconnectSocket();
