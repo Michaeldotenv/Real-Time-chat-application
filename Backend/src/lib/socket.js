@@ -1,41 +1,61 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const server = http.createServer(app);
 
-// Production-ready Socket.IO configuration
+// Enhanced production-ready Socket.IO configuration
 const io = new Server(server, {
   cors: {
     origin: process.env.NODE_ENV === "production"
       ? [
-          process.env.FRONTEND_URL,
-          "https://your-frontend-app.onrender.com",
-          "http://your-frontend-app.onrender.com"
+          "https://chatxspace.onrender.com",
+          "http://chatxspace.onrender.com"
         ]
       : "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowedHeaders: ["authorization"]
   },
-  path: "/socket.io", // Explicit path for Render proxy
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  path: "/socket.io",
+  pingTimeout: 30000,  // Reduced from 60s to 30s
+  pingInterval: 15000, // Reduced from 25s to 15s
   connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes recovery window
-    skipMiddlewares: true
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: false // Changed to run middlewares on recovery
   },
-  transports: ["websocket", "polling"] // Enable both for reliability
+  transports: ["websocket", "polling"],
+  allowEIO3: true // For Socket.IO v2 client compatibility
 });
 
 // Connection state tracking
 io.onlineUsers = new Map();
 io.typingUsers = new Map();
 
+// Authentication middleware
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      throw new Error('Authentication token missing');
+    }
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+    next();
+  } catch (err) {
+    console.error('Socket auth error:', err.message);
+    next(new Error('Authentication failed'));
+  }
+});
+
 // Cleanup stale typing indicators
 const cleanupTypingStatus = () => {
   const now = Date.now();
-  for (const [chatId, typingInfo] of io.typingUsers.entries()) {
+  io.typingUsers.forEach((typingInfo, chatId) => {
     if (now - typingInfo.timestamp > 5000) {
       const [user1, user2] = chatId.split('-');
       io.typingUsers.delete(chatId);
@@ -48,33 +68,39 @@ const cleanupTypingStatus = () => {
         });
       }
     }
-  }
+  });
 };
 
 // Enhanced connection handling
 io.on("connection", (socket) => {
-  console.log(`New connection: ${socket.id} (${process.env.NODE_ENV || 'development'})`);
+  console.log(`Authenticated connection: ${socket.id} (User: ${socket.userId})`);
 
-  // Debugging events
-  socket.onAny((event, ...args) => {
-    console.log(`Socket event: ${event}`, args);
-  });
-
+  // Register user immediately after connection
   socket.on("register-user", (userId) => {
-    const userIdStr = userId.toString();
-    io.onlineUsers.set(userIdStr, socket.id);
-    io.emit("user-online", userIdStr);
-    console.log(`User ${userIdStr} online (${io.onlineUsers.size} total)`);
+    if (userId !== socket.userId) {
+      console.warn(`User ID mismatch: ${userId} vs ${socket.userId}`);
+      return;
+    }
+
+    io.onlineUsers.set(userId, socket.id);
+    io.emit("user-online", userId);
+    console.log(`User ${userId} registered (${io.onlineUsers.size} online)`);
   });
 
+  // Typing indicators
   socket.on("typing-started", ({ senderId, receiverId }) => {
+    if (senderId !== socket.userId) {
+      console.warn(`Unauthorized typing start from ${socket.id}`);
+      return;
+    }
+
     const chatId = [senderId, receiverId].sort().join('-');
     io.typingUsers.set(chatId, {
       userId: senderId,
       timestamp: Date.now()
     });
     
-    const receiverSocketId = io.onlineUsers.get(receiverId.toString());
+    const receiverSocketId = io.onlineUsers.get(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("user-typing", { 
         userId: senderId, 
@@ -87,7 +113,7 @@ io.on("connection", (socket) => {
     const chatId = [senderId, receiverId].sort().join('-');
     io.typingUsers.delete(chatId);
     
-    const receiverSocketId = io.onlineUsers.get(receiverId.toString());
+    const receiverSocketId = io.onlineUsers.get(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("user-typing", { 
         userId: senderId, 
@@ -96,8 +122,9 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Message receipts
   socket.on("message-read", ({ messageId, readerId, senderId }) => {
-    const senderSocketId = io.onlineUsers.get(senderId.toString());
+    const senderSocketId = io.onlineUsers.get(senderId);
     if (senderSocketId) {
       io.to(senderSocketId).emit("message-read-receipt", { 
         messageId, 
@@ -107,7 +134,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("message-delivered", ({ messageId, senderId }) => {
-    const senderSocketId = io.onlineUsers.get(senderId.toString());
+    const senderSocketId = io.onlineUsers.get(senderId);
     if (senderSocketId) {
       io.to(senderSocketId).emit("message-delivered-receipt", { 
         messageId 
@@ -115,48 +142,60 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log(`Disconnected: ${socket.id}`);
+  // Handle disconnection
+  socket.on("disconnect", (reason) => {
+    console.log(`Disconnected: ${socket.id} (${reason})`);
     
-    let disconnectedUserId = null;
-    for (const [userId, socketId] of io.onlineUsers.entries()) {
-      if (socketId === socket.id) {
-        disconnectedUserId = userId;
-        io.onlineUsers.delete(userId);
-        io.emit("user-offline", userId);
-        console.log(`User ${userId} offline (${io.onlineUsers.size} remaining)`);
-        break;
-      }
-    }
+    // Find and remove disconnected user
+    if (socket.userId && io.onlineUsers.get(socket.userId) === socket.id) {
+      io.onlineUsers.delete(socket.userId);
+      io.emit("user-offline", socket.userId);
+      console.log(`User ${socket.userId} offline (${io.onlineUsers.size} remaining)`);
 
-    // Cleanup typing indicators for disconnected user
-    if (disconnectedUserId) {
-      for (const [chatId, typingInfo] of io.typingUsers.entries()) {
-        if (typingInfo.userId === disconnectedUserId) {
+      // Cleanup typing indicators
+      io.typingUsers.forEach((typingInfo, chatId) => {
+        if (typingInfo.userId === socket.userId) {
           io.typingUsers.delete(chatId);
           const [user1, user2] = chatId.split('-');
-          const otherUserId = user1 === disconnectedUserId ? user2 : user1;
+          const otherUserId = user1 === socket.userId ? user2 : user1;
           const otherUserSocketId = io.onlineUsers.get(otherUserId);
           if (otherUserSocketId) {
             io.to(otherUserSocketId).emit("user-typing", { 
-              userId: disconnectedUserId, 
+              userId: socket.userId, 
               isTyping: false 
             });
           }
         }
-      }
+      });
     }
+  });
+
+  // Error handling
+  socket.on("error", (err) => {
+    console.error(`Socket error (${socket.id}):`, err);
   });
 });
 
-// Error handling
+// Enhanced error handling
 io.engine.on("connection_error", (err) => {
-  console.error("Socket.IO connection error:", {
+  console.error("Engine connection error:", {
     code: err.code,
     message: err.message,
-    context: err.context
+    context: err.context,
+    reqHeaders: err.request.headers
   });
+
+  // Handle specific error codes
+  if (err.code === 1) { // Session ID unknown
+    console.log("Attempting to recover from session error...");
+  }
 });
+
+// Heartbeat monitoring
+setInterval(() => {
+  console.log(`Current connections: ${io.engine.clientsCount}`);
+  console.log(`Online users: ${io.onlineUsers.size}`);
+}, 30000);
 
 // Regular cleanup
 setInterval(cleanupTypingStatus, 5000);

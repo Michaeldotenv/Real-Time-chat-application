@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const AxiosInstance = axios.create({
-    baseURL : import.meta.env.VITE_API_URL + "/api" || "http://localhost:5000/api/auth" ,
+    baseURL : 'https://chatspacev2.onrender.com/api'|| import.meta.env.VITE_API_URL + "/api" || "http://localhost:5000/api/auth" ,
     withCredentials : true,
     headers: {
         'Content-Type': 'application/json',
