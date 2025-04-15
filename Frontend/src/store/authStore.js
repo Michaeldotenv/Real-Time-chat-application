@@ -18,7 +18,7 @@ export const useAuthStore = create((set, get) => ({
   // Auth Methods
   checkAuth: async () => {
     try {
-      const response = await AxiosInstance.get("/api/auth/check-auth", {
+      const response = await AxiosInstance.get("/auth/check-auth", {
         withCredentials: true
       });
       set({ authUser: response.data });
@@ -33,7 +33,7 @@ export const useAuthStore = create((set, get) => ({
   signup: async (formData) => {
     try {
       set({ isSigningUp: true });
-      const response = await AxiosInstance.post("/api/auth/signup", formData, {
+      const response = await AxiosInstance.post("/auth/signup", formData, {
         withCredentials: true
       });
       set({ authUser: response.data });
@@ -51,7 +51,7 @@ export const useAuthStore = create((set, get) => ({
   signin: async (credentials) => {
     try {
       set({ isLoggingIn: true });
-      const response = await AxiosInstance.post("/api/auth/signin", credentials, {
+      const response = await AxiosInstance.post("/auth/signin", credentials, {
         withCredentials: true
       });
       set({ authUser: response.data.user });
