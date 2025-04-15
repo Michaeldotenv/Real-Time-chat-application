@@ -52,7 +52,7 @@ export const useAuthStore = create((set, get) => ({
 signin: async (credentials) => {
   try {
     set({ isLoggingIn: true });
-    const response = await AxiosInstance.post("auth/signin", credentials, {
+    const response = await AxiosInstance.post("/auth/signin", credentials, {
       withCredentials: true
     });
     
