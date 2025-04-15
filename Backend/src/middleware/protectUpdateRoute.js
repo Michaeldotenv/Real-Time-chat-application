@@ -1,49 +1,28 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/usermodel.js';
-import { generateToken } from '../lib/generateToken.js';
-const protectRoute = async (req, res, next) => {
-    // 1. Robust token extraction
-    try {
+import { useEffect } from 'react';
+import { useAuthStore } from '../store/authStore.js';
+import { useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
-        const token = req.cookies.token
+const ProtectedRoute = ({ children }) => {
+  const { authUser, isCheckingAuth, error } = useAuthStore();
+  const navigate = useNavigate();
 
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                code: "NO_TOKEN",
-                message: "Authentication required"
-            });
-        }
-             // 2. Verify with clock tolerance
-             const decoded = jwt.verify(token, process.env.JWT_SECRET)
-             if(!decoded){
-                res.status(404).json({
-                    message : "Unauthorized-Invalid token"
-                })
-             }
-        // 3. Secure user lookup
-        const user = await User.findById(decoded.userId).select('-password');
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                code: "ACCOUNT_INACTIVE",
-                message: "Account not found"
-            });
-        }
-
-    
-        req.user = user;
-
-        
-        next();
-        
-    }catch (error) {
-        console.error("Token verification error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error"
-        });
+  useEffect(() => {
+    // Only redirect if auth check is complete and no user
+    if (!isCheckingAuth && !authUser && !error) {
+      navigate('/signin', { replace: true });
     }
+  }, [authUser, isCheckingAuth, error, navigate]);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  return authUser ? children : null;
 };
-export default protectRoute
+
+export default ProtectedRoute;
