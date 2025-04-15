@@ -16,19 +16,31 @@ export const useAuthStore = create((set, get) => ({
   onlineUsers: new Set(),
 
   // Auth Methods
-  checkAuth: async () => {
-    try {
-      const response = await AxiosInstance.get("/auth/check-auth", {
-        withCredentials: true
-      });
+checkAuth: async () => {
+  try {
+    set({ isCheckingAuth: true });
+    const response = await AxiosInstance.get("/auth/check-auth", {
+      withCredentials: true,
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
+    
+    if (response.data) {
       set({ authUser: response.data });
       get().connectSocket(response.data._id);
-    } catch (error) {
-      set({ authUser: null });
-    } finally {
-      set({ isCheckingAuth: false });
+      return true;
     }
-  },
+    throw new Error("No user data");
+  } catch (error) {
+    console.error("Auth check failed:", error);
+    set({ authUser: null });
+    return false;
+  } finally {
+    set({ isCheckingAuth: false });
+  }
+},
+
 
   signup: async (formData) => {
     try {
@@ -51,28 +63,39 @@ export const useAuthStore = create((set, get) => ({
 // In authStore.js - update the signin method
 signin: async (credentials) => {
   try {
-    set({ isLoggingIn: true });
+    set({ isLoggingIn: true, error: null });
     const response = await AxiosInstance.post("/auth/signin", credentials, {
-      withCredentials: true
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
-    
-    // Ensure we're getting the expected response structure
-    if (response.data && response.data.user) {
-      set({ authUser: response.data.user });
-      get().connectSocket(response.data.user._id);
-      toast.success("Login successful!");
-      return true;
-    } else {
-      throw new Error("Invalid response structure");
+
+    if (!response.data?.user) {
+      throw new Error("Invalid response format");
     }
+
+    // Delay state update to ensure cookies are processed
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    set({ authUser: response.data.user });
+    get().connectSocket(response.data.user._id);
+    
+    // Verify auth state immediately
+    await get().checkAuth();
+    
+    toast.success("Login successful!");
+    return true;
   } catch (error) {
     console.error("Login error:", error);
+    set({ error: error.message });
     toast.error(error.response?.data?.message || "Login failed");
     return false;
   } finally {
-    set({ isLoggingIn: false, isCheckingAuth: false }); // Ensure checking state is reset
+    set({ isLoggingIn: false });
   }
 },
+
   signout: async () => {
     try {
       await AxiosInstance.post("auth/signout", {}, {
