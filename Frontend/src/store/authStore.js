@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -125,7 +125,8 @@ export const useAuthStore = create((set, get) => ({
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
-      transports: ["websocket"] // Force WebSocket transport
+      transports: ["websocket"],
+      path: '/socket.io'  // Force WebSocket transport
     });
 
     const setupSocketListeners = () => {
