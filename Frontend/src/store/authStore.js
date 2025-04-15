@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -14,101 +14,61 @@ export const useAuthStore = create((set, get) => ({
   isCheckingAuth: true,
   socket: null,
   onlineUsers: new Set(),
-  error: null,
 
   // Auth Methods
   checkAuth: async () => {
     try {
-      set({ isCheckingAuth: true, error: null });
-      const response = await AxiosInstance.get("/auth/check-auth", {
-        withCredentials: true
-      });
-      set({ 
-        authUser: response.data,
-        isCheckingAuth: false
-      });
+      const response = await AxiosInstance.get("/auth/check-auth");
+      set({ authUser: response.data });
       get().connectSocket(response.data._id);
-      return true;
     } catch (error) {
-      console.error("Auth check failed:", error);
-      set({ 
-        authUser: null,
-        isCheckingAuth: false,
-        error: error.response?.data?.message || "Session expired"
-      });
-      return false;
+      set({ authUser: null });
+    } finally {
+      set({ isCheckingAuth: false });
     }
   },
 
   signup: async (formData) => {
     try {
-      set({ isSigningUp: true, error: null });
-      const response = await AxiosInstance.post("/auth/signup", formData, {
-        withCredentials: true
-      });
-      set({ 
-        authUser: response.data,
-        isSigningUp: false
-      });
+      set({ isSigningUp: true });
+      const response = await AxiosInstance.post("/auth/signup", formData);
+      set({ authUser: response.data });
       get().connectSocket(response.data._id);
       toast.success("Account created!");
       return true;
     } catch (error) {
-      console.error("Signup failed:", error);
-      set({
-        isSigningUp: false,
-        error: error.response?.data?.message || "Signup failed"
-      });
       toast.error(error.response?.data?.message || "Signup failed");
       return false;
+    } finally {
+      set({ isSigningUp: false });
     }
   },
 
   signin: async (credentials) => {
     try {
-      set({ isLoggingIn: true, error: null });
-      const response = await AxiosInstance.post("/auth/signin", credentials, {
-        withCredentials: true
-      });
-      set({ 
-        authUser: response.data.user,
-        isLoggingIn: false
-      });
+      set({ isLoggingIn: true });
+      const response = await AxiosInstance.post("/auth/signin", credentials, {withCredentials:true});
+      set({ authUser: response.data.user });
       get().connectSocket(response.data.user._id);
       toast.success("Login successful!");
       return true;
     } catch (error) {
-      console.error("Login failed:", error);
-      set({
-        isLoggingIn: false,
-        error: error.response?.data?.message || "Login failed"
-      });
       toast.error(error.response?.data?.message || "Login failed");
       return false;
+    } finally {
+      set({ isLoggingIn: false });
     }
   },
 
   signout: async () => {
     try {
-      set({ error: null });
-      await AxiosInstance.post("/auth/signout", {}, {
-        withCredentials: true
-      });
+      await AxiosInstance.post("/auth/signout");
       get().disconnectSocket();
-      set({ 
-        authUser: null, 
-        onlineUsers: new Set() 
-      });
+      set({ authUser: null, onlineUsers: new Set() });
       toast.success("Logged out!");
       return true;
     } catch (error) {
-      console.error("Logout failed:", error);
-      set({
-        error: error.response?.data?.message || "Logout failed"
-      });
-      // Force clear auth state even if logout fails
-      get().disconnectSocket();
-      set({ authUser: null, onlineUsers: new Set() });
+      toast.error(error.response?.data?.message || "Logout failed");
       return false;
     }
   },
@@ -125,11 +85,11 @@ export const useAuthStore = create((set, get) => ({
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
-      transports: ["websocket"],
-      path: '/socket.io'  // Force WebSocket transport
+      path:"/socket.io"
     });
 
     const setupSocketListeners = () => {
+      // Connection Events
       newSocket.on("connect", () => {
         console.log("Socket connected");
         newSocket.emit("register-user", userId);
@@ -137,11 +97,7 @@ export const useAuthStore = create((set, get) => ({
 
       newSocket.on("connect_error", (err) => {
         console.error("Socket connection error:", err);
-        if (err.message.includes("401")) {
-          // Handle unauthorized errors
-          set({ authUser: null });
-          toast.error("Session expired. Please login again.");
-        }
+        toast.error("Connection error. Trying to reconnect...");
       });
 
       newSocket.on("disconnect", (reason) => {
@@ -151,6 +107,7 @@ export const useAuthStore = create((set, get) => ({
         }
       });
 
+      // User Status Events
       newSocket.on("user-online", (userId) => {
         set(state => ({
           onlineUsers: new Set([...state.onlineUsers, userId])
@@ -167,10 +124,12 @@ export const useAuthStore = create((set, get) => ({
         useChatStore.getState().setUserOffline(userId);
       });
 
+      // Typing Events
       newSocket.on("user-typing", ({ userId, isTyping }) => {
         useChatStore.getState().setUserTyping(userId, isTyping);
       });
 
+      // Message Events
       newSocket.on("message-read-receipt", ({ messageId, readerId }) => {
         useChatStore.getState().updateMessageReadStatus(messageId, readerId);
       });
@@ -183,18 +142,24 @@ export const useAuthStore = create((set, get) => ({
         const chatStore = useChatStore.getState();
         const { selectedUser, authUser } = get();
 
+        // Send delivery receipt
         newSocket.emit("message-delivered", {
           messageId: message._id,
           senderId: message.senderId
         });
 
         if (selectedUser && message.senderId === selectedUser._id) {
+          // Send read receipt if viewing chat
           newSocket.emit("message-read", {
             messageId: message._id,
             readerId: authUser._id,
             senderId: message.senderId
           });
-          chatStore.addReceivedMessage({ ...message, read: true });
+
+          chatStore.addReceivedMessage({
+            ...message,
+            read: true
+          });
         } else {
           chatStore.addReceivedMessage(message);
           chatStore.addUnreadMessage(message.senderId);
@@ -228,7 +193,5 @@ export const useAuthStore = create((set, get) => ({
       senderId: authUser._id,
       receiverId
     });
-  },
-
-  clearError: () => set({ error: null })
+  }
 }));
