@@ -8,7 +8,7 @@ import authRoutes from "./src/routes/authRoutes.js"; // Matches your file struct
 import msgRoutes from "./src/routes/msgRoutes.js";   // Matches your file structure
 import { connectDB } from "./src/lib/db.js";
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 // Add this to your server code before the other routes
 app.get("/", (req, res) => {
   res.send("Real-time Chat Application Server is running");
