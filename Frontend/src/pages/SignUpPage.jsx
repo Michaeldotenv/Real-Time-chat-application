@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Eye, EyeOff, User, Mail, Lock, ArrowRight, MessageSquare } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 const SignupPage = () => {
   const [formData, setFormData] = useState({
     fullName: '',
@@ -170,9 +170,9 @@ const SignupPage = () => {
           <div className="mt-6 text-center">
             <p className="text-gray-400">
               Already have an account?{' '}
-              <a href="#" className="text-gray-300 hover:text-gray-100 font-medium transition-colors">
+              <Link to="/signin" className="text-gray-300 hover:text-gray-100 font-medium transition-colors">
                 Sign in
-              </a>
+              </Link>
             </p>
           </div>
         </div>

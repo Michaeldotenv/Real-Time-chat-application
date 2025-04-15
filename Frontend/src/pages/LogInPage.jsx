@@ -3,16 +3,16 @@ import { Mail, Lock, ArrowRight, MessageSquare } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { AxiosInstance } from '../lib/Axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const LogInPage = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const { isLoggingIn, signin, credentials} = useAuthStore();
+  const { isLoggingIn, signin, credentials } = useAuthStore();
   const [fadeIn, setFadeIn] = useState(false);
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setTimeout(() => setFadeIn(true), 100);
@@ -27,19 +27,18 @@ const LogInPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-        const success = await signin(formData);
-        if (success) {
-          navigate('/');
+      const success = await signin(formData);
+      if (success) {
+        navigate('/');
       } 
-    }catch (error) {
-        const errorMessage = error?.response?.data?.message || error.message || 'Signin failed. Please try again.';
-        toast.error(errorMessage, {
-          icon: '❌',
-          duration: 4000
-        });
-      }
-    };
-  
+    } catch (error) {
+      const errorMessage = error?.response?.data?.message || error.message || 'Signin failed. Please try again.';
+      toast.error(errorMessage, {
+        icon: '❌',
+        duration: 4000
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col md:flex-row">
@@ -114,9 +113,9 @@ const LogInPage = () => {
           <div className="mt-6 text-center">
             <p className="text-gray-400">
               Don't have an account?{' '}
-              <a href="/signup" className="text-gray-300 hover:text-gray-100 font-medium transition-colors">
+              <Link to="/signup" className="text-gray-300 hover:text-gray-100 font-medium transition-colors">
                 Sign up
-              </a>
+              </Link>
             </p>
           </div>
         </div>

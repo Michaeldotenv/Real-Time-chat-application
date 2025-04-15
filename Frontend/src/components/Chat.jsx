@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { motion } from 'framer-motion';
-import { IoSend, IoImage, IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
+import { IoSend, IoImage, IoCheckmark, IoCheckmarkDone, IoSadOutline } from 'react-icons/io5';
 import debounce from 'lodash/debounce';
+import EmojiPicker from 'emoji-picker-react';
+import { BsEmojiSmile } from 'react-icons/bs';
 
 const Chat = () => {
   const [message, setMessage] = useState('');
   const [image, setImage] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const {
     messages,
     selectedUser,
@@ -20,6 +23,7 @@ const Chat = () => {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const filePreviewUrl = image ? URL.createObjectURL(image) : null;
 
   const debouncedTypingStatus = useRef(
@@ -29,6 +33,17 @@ const Chat = () => {
       }
     }, 500)
   ).current;
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (selectedUser?._id) {
@@ -68,6 +83,12 @@ const Chat = () => {
         sendTypingStatus(selectedUser._id, false);
       }
     }
+  };
+
+  const handleEmojiClick = (emojiData) => {
+    setMessage(prev => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+    messageInputRef.current.focus();
   };
 
   const handleSend = async () => {
@@ -113,6 +134,7 @@ const Chat = () => {
   if (!selectedUser) return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center">
+        <IoSadOutline className="mx-auto text-4xl text-gray-400 mb-2" />
         <h3 className="text-xl font-medium">Select a chat</h3>
         <p className="text-gray-500">Choose a conversation from the sidebar</p>
       </div>
@@ -128,9 +150,7 @@ const Chat = () => {
     return groups;
   }, {});
 
-  // Safely check if user is typing
   const isUserTyping = selectedUser?._id ? typingUsers[selectedUser._id] || false : false;
-  // Safely check if user is online
   const isUserOnline = selectedUser?._id ? (onlineUsers?.has?.(selectedUser._id.toString()) || false) : false;
 
   return (
@@ -239,7 +259,21 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-base-300 bg-base-100">
+      <div className="p-4 border-t border-base-300 bg-base-100 relative">
+        {showEmojiPicker && (
+          <div ref={emojiPickerRef} className="absolute bottom-16 left-4 z-10">
+            <EmojiPicker 
+              onEmojiClick={handleEmojiClick}
+              width={300}
+              height={350}
+              searchDisabled
+              skinTonesDisabled
+              previewConfig={{ showPreview: false }}
+              theme="dark"
+            />
+          </div>
+        )}
+        
         {image && (
           <div className="mb-2 relative">
             <img
@@ -255,6 +289,7 @@ const Chat = () => {
             </button>
           </div>
         )}
+        
         <div className="flex gap-2">
           <button
             onClick={() => fileInputRef.current.click()}
@@ -263,6 +298,15 @@ const Chat = () => {
           >
             <IoImage size={20} />
           </button>
+          
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="btn btn-ghost btn-circle"
+            aria-label="Add emoji"
+          >
+            <BsEmojiSmile size={20} />
+          </button>
+          
           <input
             type="file"
             ref={fileInputRef}
@@ -270,6 +314,7 @@ const Chat = () => {
             accept="image/*"
             className="hidden"
           />
+          
           <textarea
             ref={messageInputRef}
             value={message}
@@ -280,6 +325,7 @@ const Chat = () => {
             rows={1}
             style={{ resize: 'none' }}
           />
+          
           <button
             className="btn btn-primary btn-circle"
             onClick={handleSend}
