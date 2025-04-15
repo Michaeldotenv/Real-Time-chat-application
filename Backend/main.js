@@ -4,47 +4,61 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { app, server } from "./src/lib/socket.js";
-import authRoutes from "./src/routes/authRoutes.js"; // Matches your file structure
-import msgRoutes from "./src/routes/msgRoutes.js";   // Matches your file structure
+import authRoutes from "./src/routes/authRoutes.js";
+import msgRoutes from "./src/routes/msgRoutes.js";
 import { connectDB } from "./src/lib/db.js";
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
 const PORT = process.env.PORT || 5000;
-// Add this to your server code before the other routes
+
+// Root route
 app.get("/", (req, res) => {
   res.send("Real-time Chat Application Server is running");
+});
 
-})
 // ========== MIDDLEWARE ==========
 app.use(express.json());
 app.use(cookieParser());
+
+// Enhanced CORS configuration
+const allowedOrigins = [
+  "https://chatxspace.onrender.com",
+  "http://localhost:5173"
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+// Additional headers
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Credentials', true);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   next();
 });
-app.use(cors({
-  origin: "https://chatxspace.onrender.com" ||
-    "http://localhost:5173",
-    credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-}));
+
+// Socket.IO configuration
 const io = new Server(server, {
   cors: {
-    origin: [
-      'https://chatxspace.onrender.com',
-      'http://localhost:5173'
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
   },
-  transports: ['websocket', 'polling'] // Enable both transports
+  transports: ['websocket', 'polling']
 });
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-});
+
 // ========== ROUTES ==========
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", msgRoutes);

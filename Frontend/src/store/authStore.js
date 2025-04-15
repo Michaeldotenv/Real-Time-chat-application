@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"; // Changed port to 5000 to match server
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -18,7 +18,9 @@ export const useAuthStore = create((set, get) => ({
   // Auth Methods
   checkAuth: async () => {
     try {
-      const response = await AxiosInstance.get("/auth/check-auth");
+      const response = await AxiosInstance.get("/api/auth/check-auth", {
+        withCredentials: true
+      });
       set({ authUser: response.data });
       get().connectSocket(response.data._id);
     } catch (error) {
@@ -31,7 +33,9 @@ export const useAuthStore = create((set, get) => ({
   signup: async (formData) => {
     try {
       set({ isSigningUp: true });
-      const response = await AxiosInstance.post("/auth/signup", formData);
+      const response = await AxiosInstance.post("/api/auth/signup", formData, {
+        withCredentials: true
+      });
       set({ authUser: response.data });
       get().connectSocket(response.data._id);
       toast.success("Account created!");
@@ -47,7 +51,9 @@ export const useAuthStore = create((set, get) => ({
   signin: async (credentials) => {
     try {
       set({ isLoggingIn: true });
-      const response = await AxiosInstance.post("/auth/signin", credentials, {withCredentials:true});
+      const response = await AxiosInstance.post("/api/auth/signin", credentials, {
+        withCredentials: true
+      });
       set({ authUser: response.data.user });
       get().connectSocket(response.data.user._id);
       toast.success("Login successful!");
@@ -62,7 +68,9 @@ export const useAuthStore = create((set, get) => ({
 
   signout: async () => {
     try {
-      await AxiosInstance.post("/auth/signout");
+      await AxiosInstance.post("/api/auth/signout", {}, {
+        withCredentials: true
+      });
       get().disconnectSocket();
       set({ authUser: null, onlineUsers: new Set() });
       toast.success("Logged out!");
@@ -85,11 +93,11 @@ export const useAuthStore = create((set, get) => ({
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
-      path:"/socket.io"
+      path: "/socket.io",
+      secure: process.env.NODE_ENV === "production",
     });
 
     const setupSocketListeners = () => {
-      // Connection Events
       newSocket.on("connect", () => {
         console.log("Socket connected");
         newSocket.emit("register-user", userId);
@@ -107,7 +115,6 @@ export const useAuthStore = create((set, get) => ({
         }
       });
 
-      // User Status Events
       newSocket.on("user-online", (userId) => {
         set(state => ({
           onlineUsers: new Set([...state.onlineUsers, userId])
@@ -124,12 +131,10 @@ export const useAuthStore = create((set, get) => ({
         useChatStore.getState().setUserOffline(userId);
       });
 
-      // Typing Events
       newSocket.on("user-typing", ({ userId, isTyping }) => {
         useChatStore.getState().setUserTyping(userId, isTyping);
       });
 
-      // Message Events
       newSocket.on("message-read-receipt", ({ messageId, readerId }) => {
         useChatStore.getState().updateMessageReadStatus(messageId, readerId);
       });
@@ -142,14 +147,12 @@ export const useAuthStore = create((set, get) => ({
         const chatStore = useChatStore.getState();
         const { selectedUser, authUser } = get();
 
-        // Send delivery receipt
         newSocket.emit("message-delivered", {
           messageId: message._id,
           senderId: message.senderId
         });
 
         if (selectedUser && message.senderId === selectedUser._id) {
-          // Send read receipt if viewing chat
           newSocket.emit("message-read", {
             messageId: message._id,
             readerId: authUser._id,
