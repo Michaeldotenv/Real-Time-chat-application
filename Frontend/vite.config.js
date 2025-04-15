@@ -7,4 +7,20 @@ export default defineConfig({
   plugins: [react(),
     tailwindcss()
   ],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: isProduction 
+          ? 'https://chatspacev2.onrender.com' // Your production backend
+          : 'http://localhost:5000', // Local development
+        changeOrigin: true,
+        secure: false,
+        rewrite: path => path.replace(/^\/api/, '')
+      }
+    }
+  },
+  build: {
+    outDir: 'dist'
+  }
 })
