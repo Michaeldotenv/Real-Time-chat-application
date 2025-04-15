@@ -1,38 +1,54 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from "./components/Navbar";
 import SignUpPage from './pages/SignUpPage';
 import LogInPage from './pages/LogInPage';
-import Preloader1 from './components/loaders.jsx';
 import SettingsPage from './pages/SettingsPage';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import { useAuthStore } from './store/authStore.js';
 import { ThemeProvider } from './components/ThemeProvider';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
-  const { authUser, checkAuth, isCheckingAuth } = useAuthStore();
   const location = useLocation();
+  const { authUser, isCheckingAuth } = useAuthStore();
 
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
-  if (isCheckingAuth) {
-    return <Preloader1 />;
-  }
+  // Don't show navbar on auth pages
+  const showNavbar = !['/signin', '/signup'].includes(location.pathname);
 
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-base-100 text-base-content">
-        {!['/signin', '/signup'].includes(location.pathname) && <Navbar />}
+        {showNavbar && <Navbar />}
         <Routes>
-          <Route path='/' element={authUser ? <HomePage /> : <Navigate to="/signin" state={{ from: location }} replace />} />
-          <Route path='/signin' element={!authUser ? <LogInPage /> : <Navigate to="/" replace />} />
-          <Route path='/signup' element={!authUser ? <SignUpPage /> : <Navigate to="/" replace />} />
-          <Route path='/profile' element={authUser ? <ProfilePage /> : <Navigate to="/signin" state={{ from: location }} replace />} />
-          <Route path='/settings' element={authUser ? <SettingsPage /> : <Navigate to="/signin" state={{ from: location }} replace />} />
-          <Route path='*' element={<Navigate to={authUser ? '/' : '/signin'} replace />} />
+          <Route path="/signin" element={
+            authUser ? <Navigate to="/" replace /> : <LogInPage />
+          } />
+          <Route path="/signup" element={
+            authUser ? <Navigate to="/" replace /> : <SignUpPage />
+          } />
+          
+          {/* Protected Routes */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="*" element={
+            <Navigate to={authUser ? '/' : '/signin'} replace />
+          } />
         </Routes>
       </div>
     </ThemeProvider>
