@@ -9,7 +9,6 @@ import msgRoutes from "./src/routes/msgRoutes.js";   // Matches your file struct
 import { connectDB } from "./src/lib/db.js";
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-const server = createServer(app);
 
 const PORT = process.env.PORT || 5000;
 // Add this to your server code before the other routes
