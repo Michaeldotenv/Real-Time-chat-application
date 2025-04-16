@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "https://chatxspace.up.railway.app";
+const BASE_URL = import.meta.env.VITE_API_URL || "https://chatspacev3.onrender.com";
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
