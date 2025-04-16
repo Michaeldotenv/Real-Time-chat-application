@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // Prioritize environment variable, then fallback to hardcoded production URL
-const BASE_URL = import.meta.env.VITE_API_URL || "https://chatspacev2.onrender.com";
+const BASE_URL = import.meta.env.VITE_API_URL || "https://chatxspace.up.railway.app";
 
 export const AxiosInstance = axios.create({
   baseURL: `${BASE_URL}/api`,
