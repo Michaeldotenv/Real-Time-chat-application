@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -9,85 +10,38 @@ import msgRoutes from "./src/routes/msgRoutes.js";
 import { connectDB } from "./src/lib/db.js";
 
 const PORT = process.env.PORT || 5000;
-const FRONTEND_URL = "https://chatxspace.onrender.com";
-const BACKEND_URL = "https://chatspacev2.onrender.com";
 
-// Root route
-app.get("/", (req, res) => {
-  res.send("Real-time Chat Application Server is running");
-});
-
-// ========== MIDDLEWARE ==========
-app.use(express.json({ limit: '50mb' }));
+// Middleware
+app.use(express.json());
 app.use(cookieParser());
-
-// Enhanced CORS configuration
-const allowedOrigins = [
-  "https://chatxspace.onrender.com",
-  "http://chatxspace.onrender.com",
-  "http://localhost:5173"
-];
-
-// HTTPS redirection but only for web pages, not API calls
-app.use((req, res, next) => {
-  // Skip HTTPS redirect for API calls and socket connections
-  if (
-    req.path.startsWith('/api') || 
-    req.path.startsWith('/socket.io') ||
-    req.path === '/health' ||
-    process.env.NODE_ENV !== 'production'
-  ) {
-    return next();
-  }
-  
-  if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
-    return res.redirect(`https://${req.headers.host}${req.url}`);
-  }
-  next();
-});
-
-// CORS config - simplified to avoid issues
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: [
+    "https://chatxspace.onrender.com",
+    "http://localhost:5173"
+  ],
+  credentials: true
 }));
 
-// Explicit options handling
-app.options('*', cors());
-
-// ========== ROUTES ==========
+// Routes
+app.get("/", (req, res) => res.send("Chat server is running"));
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", msgRoutes);
 
-// ========== HEALTH CHECK ==========
+// Health check
 app.get("/health", (req, res) => {
-  res.status(200).json({ 
-    status: "OK",
-    serverTime: new Date().toISOString(), 
-    environment: process.env.NODE_ENV || 'development'
-  });
+  res.status(200).json({ status: "OK" });
 });
 
-// ========== ERROR HANDLER ==========
+// Error handler
 app.use((err, req, res, next) => {
-  console.error("Server error:", err.stack);
-  res.status(500).json({ 
-    error: "Server Error", 
-    message: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : err.message 
-  });
+  console.error(err.stack);
+  res.status(500).json({ error: "Server Error", message: err.message });
 });
 
-// ========== START SERVER ==========
+// Start server
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`Frontend URL: ${FRONTEND_URL}`);
-  console.log(`Backend URL: ${BACKEND_URL}`);
-  
   connectDB().catch(err => {
-    console.error("Database connection failed:", err);
-    // Don't exit, keep server running even with DB issues
-    console.log("Server continuing without database connection");
+    console.error("❌ DB connection failed:", err.message);
   });
 });
