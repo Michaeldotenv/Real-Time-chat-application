@@ -46,21 +46,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS config - more permissive
+// CORS config - simplified to avoid issues
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      // Log the origin for debugging
-      console.log(`CORS request from unauthorized origin: ${origin}`);
-      
-      // Still allow it in production to troubleshoot
-      return callback(null, true);
-    }
-    return callback(null, true);
-  },
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -78,8 +66,7 @@ app.get("/health", (req, res) => {
   res.status(200).json({ 
     status: "OK",
     serverTime: new Date().toISOString(), 
-    environment: process.env.NODE_ENV || 'development',
-    origin: res.getHeader('Access-Control-Allow-Origin') || '*'
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
