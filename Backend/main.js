@@ -11,7 +11,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 
 const PORT = process.env.PORT || 5000;
-
+const FRONTEND_URL= "https://chatxspace.onrender.com"
 // Root route
 app.get("/", (req, res) => {
   res.send("Real-time Chat Application Server is running");
