@@ -2,6 +2,7 @@ import { generateToken } from "../lib/generateToken.js";
 import User from "../models/usermodel.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
+import jwt from "jsonwebtoken";
 
 export const Signup = async (req, res) => {
   try {
@@ -34,15 +35,18 @@ export const Signup = async (req, res) => {
     });
 
     if (newUser) {
-      generateToken(newUser._id, res);
+      const token = generateToken(newUser._id, res);
       await newUser.save();
 
       res.status(201).json({
         message: "User created Successfully",
-        _id: newUser._id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        profilePic: newUser.profilePic
+        token, // Include token in response
+        user: {
+          _id: newUser._id,
+          email: newUser.email,
+          fullName: newUser.fullName,
+          profilePic: newUser.profilePic
+        }
       });
     } else {
       res.status(400).json({
@@ -71,11 +75,12 @@ export const Signin = async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
 
     res.status(200).json({
       success: true,
       message: "Login successful",
+      token, // Include token in response
       user: { ...user._doc, password: undefined }
     });
   } catch (error) {
@@ -86,7 +91,11 @@ export const Signin = async (req, res) => {
 
 export const Signout = async (req, res) => {
   try {
-    res.clearCookie("token", { maxAge: 0 });
+    res.clearCookie("token", { 
+      maxAge: 0,
+      sameSite: "none",
+      secure: process.env.NODE_ENV === "production",
+    });
     res.status(200).json({ success: true, message: "Signed out successfully" });
   } catch (error) {
     console.error("Signout error:", error);
@@ -135,7 +144,12 @@ export const updateProfile = async (req, res) => {
 
 export const checkAuth = (req, res) => {
   try {
-    res.status(200).json(req.user);
+    // Make sure to include all user data needed on the frontend
+    const userData = {
+      ...req.user._doc,
+      password: undefined
+    };
+    res.status(200).json(userData);
   } catch (error) {
     console.error("Error in checking authentication:", error.message);
     res.status(500).json({

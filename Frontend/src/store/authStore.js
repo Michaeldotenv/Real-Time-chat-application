@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import io from "socket.io-client";
 import { useChatStore } from "./chatStore";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_API_URL || "https://chatspacev2.onrender.com";
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -36,7 +36,7 @@ export const useAuthStore = create((set, get) => ({
       throw new Error("No user data");
     } catch (error) {
       console.error("Auth check failed:", error);
-      set({ authUser: null, error: error.message });
+      set({ authUser: null, error: error.message || "Authentication failed" });
       localStorage.removeItem('token');
       return false;
     } finally {
@@ -53,15 +53,21 @@ export const useAuthStore = create((set, get) => ({
       
       if (response.data?.token) {
         localStorage.setItem('token', response.data.token);
+      } else if (response.data?._id) {
+        // If no token in response but user created, still works with cookies
+        toast.success("Account created!");
+        set({ authUser: response.data });
+        get().connectSocket(response.data._id);
+        return true;
       }
       
-      set({ authUser: response.data.user });
-      get().connectSocket(response.data.user._id);
       toast.success("Account created!");
+      set({ authUser: response.data });
+      get().connectSocket(response.data._id);
       return true;
     } catch (error) {
       console.error("Signup error:", error);
-      set({ error: error.message });
+      set({ error: error.response?.data?.message || error.message || "Signup failed" });
       toast.error(error.response?.data?.message || "Signup failed");
       return false;
     } finally {
@@ -86,24 +92,17 @@ export const useAuthStore = create((set, get) => ({
       if (response.data?.token) {
         localStorage.setItem('token', response.data.token);
       }
-
-      // Wait for cookies to be processed
-      await new Promise(resolve => setTimeout(resolve, 300));
       
       set({ authUser: response.data.user });
       
-      // Connect socket after auth is confirmed
+      // Connect socket after setting auth user
       await get().connectSocket(response.data.user._id);
-      
-      // Verify auth state
-      const authValid = await get().checkAuth();
-      if (!authValid) throw new Error("Authentication verification failed");
       
       toast.success("Login successful!");
       return true;
     } catch (error) {
       console.error("Login error:", error);
-      set({ error: error.message });
+      set({ error: error.response?.data?.message || error.message || "Login failed" });
       localStorage.removeItem('token');
       toast.error(error.response?.data?.message || "Login failed");
       return false;
@@ -142,20 +141,21 @@ export const useAuthStore = create((set, get) => ({
       }
 
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.error("No token available for socket connection");
-        return resolve(false);
-      }
+      console.log("Token for socket connection:", token ? "Found" : "Not found");
+      
+      // Simple fallback solution - use a dummy token if none exists
+      // This way socket will at least try to connect and cookies might work
+      const socketToken = token || "fallback-auth";
 
       const newSocket = io(BASE_URL, {
         withCredentials: true,
         autoConnect: false,
         reconnection: true,
-        reconnectionAttempts: 3,
+        reconnectionAttempts: 5,
         reconnectionDelay: 1000,
         path: "/socket.io",
-        auth: { token },
-        transports: ['websocket']
+        auth: { token: socketToken },
+        transports: ['websocket', 'polling']
       });
 
       const setupSocketListeners = () => {
@@ -166,8 +166,11 @@ export const useAuthStore = create((set, get) => ({
         });
 
         newSocket.on("connect_error", (err) => {
-          console.error("Socket connection error:", err);
-          if (err.message.includes("Session ID unknown")) {
+          console.error("Socket connection error:", err.message);
+          // Try again with polling if websocket fails
+          if (newSocket.io.opts.transports[0] === 'websocket') {
+            console.log("Falling back to polling transport");
+            newSocket.io.opts.transports = ['polling', 'websocket'];
             setTimeout(() => newSocket.connect(), 1000);
           }
           resolve(false);
