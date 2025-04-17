@@ -2,7 +2,6 @@ checkout at https://chatzspace.onrender.com/#/
 
 # Real-Time Chat Application 💬  
 
-![App Screenshot](/client/public/screenshot.png) *Replace with your actual screenshot*
 
 A full-stack chat app with **real-time messaging**, **typing indicators**, and **image sharing** powered by WebSockets and Cloudinary.
 
